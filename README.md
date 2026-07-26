@@ -39,7 +39,7 @@ A local transcription tool for X-ray specialists. It converts medical dictations
 
 Run the application:
 ```bash
-python main.py
+python run.py
 ```
 
 1. Select the audio source (Microphone or Loopback).
