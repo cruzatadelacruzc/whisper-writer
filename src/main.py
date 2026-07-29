@@ -14,6 +14,7 @@ from ui.settings_window import SettingsWindow
 from ui.status_window import StatusWindow
 from transcription import create_local_model
 from input_simulation import InputSimulator
+from transcription_history import append_transcription
 from utils import ConfigManager
 
 
@@ -164,8 +165,14 @@ class WhisperWriterApp(QObject):
 
     def on_transcription_complete(self, result):
         """
-        When the transcription is complete, type the result and start listening for the activation key again.
+        When the transcription is complete, save it to the history, type the
+        result, and start listening for the activation key again.
         """
+        try:
+            append_transcription(result)
+        except OSError as e:
+            print(f'Could not save transcription history: {e}')
+
         self.input_simulator.typewrite(result)
 
         if ConfigManager.get_config_value('misc', 'noise_on_completion'):
