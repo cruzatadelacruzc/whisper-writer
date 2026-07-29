@@ -2,9 +2,20 @@ import subprocess
 import os
 import signal
 import time
-from pynput.keyboard import Controller as PynputController
+from pynput.keyboard import Controller as PynputController, Key
 
 from utils import ConfigManager
+
+
+def _get_clipboard():
+    """Return the Qt clipboard of the running application."""
+    from PyQt5.QtWidgets import QApplication
+    return QApplication.clipboard()
+
+
+def _process_qt_events():
+    from PyQt5.QtWidgets import QApplication
+    QApplication.processEvents()
 
 def run_command_or_exit_on_failure(command):
     """
@@ -31,7 +42,7 @@ class InputSimulator:
         self.input_method = ConfigManager.get_config_value('post_processing', 'input_method')
         self.dotool_process = None
 
-        if self.input_method == 'pynput':
+        if self.input_method in ('pynput', 'clipboard'):
             self.keyboard = PynputController()
         elif self.input_method == 'dotool':
             self._initialize_dotool()
@@ -61,6 +72,8 @@ class InputSimulator:
         interval = ConfigManager.get_config_value('post_processing', 'writing_key_press_delay')
         if self.input_method == 'pynput':
             self._typewrite_pynput(text, interval)
+        elif self.input_method == 'clipboard':
+            self._paste_via_clipboard(text, interval)
         elif self.input_method == 'ydotool':
             self._typewrite_ydotool(text, interval)
         elif self.input_method == 'dotool':
@@ -109,6 +122,34 @@ class InputSimulator:
         self.dotool_process.stdin.write(f"typedelay {interval * 1000}\n")
         self.dotool_process.stdin.write(f"type {text}\n")
         self.dotool_process.stdin.flush()
+
+    def _paste_via_clipboard(self, text, interval):
+        """
+        Deliver the text instantly: copy it to the clipboard, simulate
+        Ctrl+V, then restore the previous clipboard contents. Falls back
+        to typing with pynput if anything fails.
+
+        Args:
+            text (str): The text to paste.
+            interval (float): Keystroke interval used only by the fallback.
+        """
+        try:
+            clipboard = _get_clipboard()
+            previous = clipboard.text()
+            clipboard.setText(text)
+            _process_qt_events()
+            time.sleep(0.05)
+            with self.keyboard.pressed(Key.ctrl):
+                self.keyboard.press('v')
+                self.keyboard.release('v')
+            # Give the target application time to read the clipboard
+            # before restoring the previous contents.
+            time.sleep(0.3)
+            clipboard.setText(previous)
+            _process_qt_events()
+        except Exception as e:
+            print(f'Clipboard paste failed ({e}); falling back to typing.')
+            self._typewrite_pynput(text, interval)
 
     def cleanup(self):
         """
