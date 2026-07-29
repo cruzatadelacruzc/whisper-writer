@@ -2,7 +2,6 @@ import subprocess
 import os
 import signal
 import time
-from pynput.keyboard import Controller as PynputController, Key
 
 from utils import ConfigManager
 
@@ -43,6 +42,7 @@ class InputSimulator:
         self.dotool_process = None
 
         if self.input_method in ('pynput', 'clipboard'):
+            from pynput.keyboard import Controller as PynputController
             self.keyboard = PynputController()
         elif self.input_method == 'dotool':
             self._initialize_dotool()
@@ -126,18 +126,30 @@ class InputSimulator:
     def _paste_via_clipboard(self, text, interval):
         """
         Deliver the text instantly: copy it to the clipboard, simulate
-        Ctrl+V, then restore the previous clipboard contents. Falls back
-        to typing with pynput if anything fails.
+        Ctrl+V, then restore the previous clipboard contents.
+
+        Falls back to typing only when the clipboard could not be prepared;
+        a failure after that point must not re-type (the paste may already
+        have been delivered) — the previous clipboard is still restored.
 
         Args:
             text (str): The text to paste.
             interval (float): Keystroke interval used only by the fallback.
         """
+        # Phase 1: Prepare the clipboard. Fall back to typing only if this fails.
         try:
             clipboard = _get_clipboard()
             previous = clipboard.text()
             clipboard.setText(text)
             _process_qt_events()
+        except Exception as e:
+            print(f'Clipboard unavailable ({e}); falling back to typing.')
+            self._typewrite_pynput(text, interval)
+            return
+
+        # Phase 2: Perform the key events. Catch exceptions but don't retry.
+        try:
+            from pynput.keyboard import Key
             time.sleep(0.05)
             with self.keyboard.pressed(Key.ctrl):
                 self.keyboard.press('v')
@@ -145,11 +157,16 @@ class InputSimulator:
             # Give the target application time to read the clipboard
             # before restoring the previous contents.
             time.sleep(0.3)
-            clipboard.setText(previous)
-            _process_qt_events()
         except Exception as e:
-            print(f'Clipboard paste failed ({e}); falling back to typing.')
-            self._typewrite_pynput(text, interval)
+            print(f'Paste keystroke failed ({e}); transcription is in the history file.')
+        finally:
+            # Phase 3: Always restore the previous clipboard, catch and ignore
+            # any exceptions from this cleanup.
+            try:
+                clipboard.setText(previous)
+                _process_qt_events()
+            except Exception:
+                pass
 
     def cleanup(self):
         """
