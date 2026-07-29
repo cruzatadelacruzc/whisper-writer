@@ -11,12 +11,13 @@ class MainWindow(BaseWindow):
     openSettings = pyqtSignal()
     startListening = pyqtSignal()
     closeApp = pyqtSignal()
+    copyLast = pyqtSignal()
 
     def __init__(self):
         """
         Initialize the main window.
         """
-        super().__init__('WhisperWriter', 320, 180)
+        super().__init__('WhisperWriter', 460, 180)
         self.initMainUI()
 
     def initMainUI(self):
@@ -33,10 +34,16 @@ class MainWindow(BaseWindow):
         settings_btn.setFixedSize(120, 60)
         settings_btn.clicked.connect(self.openSettings.emit)
 
+        copy_btn = QPushButton('Copy Last')
+        copy_btn.setFont(QFont('Segoe UI', 10))
+        copy_btn.setFixedSize(120, 60)
+        copy_btn.clicked.connect(self.copyLast.emit)
+
         button_layout = QHBoxLayout()
         button_layout.addStretch(1)
         button_layout.addWidget(start_btn)
         button_layout.addWidget(settings_btn)
+        button_layout.addWidget(copy_btn)
         button_layout.addStretch(1)
 
         self.main_layout.addStretch(1)

@@ -55,10 +55,12 @@ class WhisperWriterApp(QObject):
 
         self.result_thread = None
 
+        self.last_transcription = ''
         self.main_window = MainWindow()
         self.main_window.openSettings.connect(self.settings_window.show)
         self.main_window.startListening.connect(self.key_listener.start)
         self.main_window.closeApp.connect(self.exit_app)
+        self.main_window.copyLast.connect(self.copy_last_transcription)
 
         if not ConfigManager.get_config_value('misc', 'hide_status_window'):
             self.status_window = StatusWindow()
@@ -173,6 +175,7 @@ class WhisperWriterApp(QObject):
         except OSError as e:
             print(f'Could not save transcription history: {e}')
 
+        self.last_transcription = result
         self.input_simulator.typewrite(result)
 
         if ConfigManager.get_config_value('misc', 'noise_on_completion'):
@@ -182,6 +185,12 @@ class WhisperWriterApp(QObject):
             self.start_result_thread()
         else:
             self.key_listener.start()
+
+    def copy_last_transcription(self):
+        """
+        Copy the most recent transcription to the clipboard.
+        """
+        QApplication.clipboard().setText(self.last_transcription)
 
     def run(self):
         """
