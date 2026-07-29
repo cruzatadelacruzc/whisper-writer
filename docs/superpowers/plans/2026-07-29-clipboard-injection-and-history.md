@@ -374,7 +374,8 @@ post_processing:
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/input_simulation.py src/config_schema.yaml src/config.yaml tests/test_input_simulation.py
+git add src/input_simulation.py src/config_schema.yaml tests/test_input_simulation.py
+# (src/config.yaml is gitignored user-local config — edit it, do NOT git add it)
 git commit -m "feat: add clipboard paste input method with typing fallback"
 ```
 
