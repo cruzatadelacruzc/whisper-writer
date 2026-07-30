@@ -9,7 +9,7 @@ WhisperWriter adapted as an "X-Ray Transcription Assistant" (Spanish medical dic
 ```bash
 venv/bin/python run.py                              # run (ALWAYS from project root: it uses cwd-relative paths)
 bash scripts/download_model.sh medium               # download model (resumable; watchdog restarts stalled transfers)
-venv/bin/pip install -r requirements.txt "setuptools<81"   # install dependencies
+venv/bin/pip install -r requirements.txt -r requirements-dev.txt "setuptools<81"   # install dependencies (incl. pytest/ruff)
 ```
 
 ## Branch flow & CI
