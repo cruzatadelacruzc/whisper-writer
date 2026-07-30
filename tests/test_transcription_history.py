@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -32,3 +33,12 @@ def test_empty_text_writes_nothing(tmp_path):
     assert append_transcription('', str(path)) is None
     assert append_transcription('   ', str(path)) is None
     assert not path.exists()
+
+
+def test_history_file_created_with_owner_only_permissions(tmp_path):
+    # The history may contain sensitive dictated content, so a freshly created
+    # file must be readable/writable by the owner only (0600).
+    path = tmp_path / 'hist.txt'
+    append_transcription('contenido sensible', str(path))
+    mode = stat.S_IMODE(os.stat(str(path)).st_mode)
+    assert mode == 0o600
