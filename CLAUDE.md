@@ -12,6 +12,22 @@ bash scripts/download_model.sh medium               # download model (resumable;
 venv/bin/pip install -r requirements.txt "setuptools<81"   # install dependencies
 ```
 
+## Branch flow & CI
+
+- `main` = stable; `develop` = integration. Both are protected by rulesets
+  (`.github/rulesets/*.json`): no direct pushes, no force-push/deletion;
+  changes land only via PR with the `tests` and `lint` checks green
+  (0 approvals required — single-account repo, GitHub cannot self-approve).
+- Work branches (`feature/...`, `fix/...`) fork from `develop` and PR back
+  into `develop`; releases are a PR `develop` → `main`.
+- CI: `.github/workflows/ci.yml` (Python 3.10, installs
+  `requirements.txt` + `requirements-dev.txt` + `setuptools<81`).
+  Run locally: `venv/bin/ruff check .` and
+  `env -u DISPLAY -u WAYLAND_DISPLAY venv/bin/python -m pytest tests/`.
+- Re-apply a ruleset after changes:
+  `gh api --method POST repos/cruzatadelacruzc/whisper-writer/rulesets --input .github/rulesets/<file>.json`
+  (POST creates; to modify an existing one use PUT `.../rulesets/<id>`).
+
 ## Critical environment gotchas
 
 - Always use `venv/bin/python` (venv with Python 3.10.12), never the system Python.
