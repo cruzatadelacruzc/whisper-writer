@@ -1,0 +1,4 @@
+# Lint for real errors only (pyflakes + basic pycodestyle); no style
+# reformatting of the inherited WhisperWriter code.
+target-version = "py310"
+exclude = ["venv"]
