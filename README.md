@@ -61,6 +61,7 @@ venv/bin/python run.py
 - Dictation hotkey: **`ctrl+shift+space`** (configurable).
 - The first transcription takes longer because the model is loaded into memory.
 - The `pkg_resources is deprecated` warning at startup is harmless: ignore it.
+- The main window (tray icon → WhisperWriter Main Menu) has three buttons: **Start** (begin a dictation), **Settings** (open the Settings window), and **Copy Last** (re-copy the most recent transcription to the clipboard, in case the original paste was missed or overwritten).
 
 ## Configuration
 
@@ -74,9 +75,15 @@ model_options:
     model: medium       # multilingual medium model
     device: cpu
     compute_type: int8  # faster and lighter on CPU
+post_processing:
+  input_method: clipboard  # paste the whole text at once (see below)
 ```
 
 It can also be edited from the application's Settings window (tray icon → Open Settings). Saving from the UI rewrites the entire `src/config.yaml`.
+
+**Input method:** `post_processing.input_method` controls how the transcribed text is delivered to the active window. The project default is `clipboard`: the whole transcription is copied to the clipboard and pasted at once with a simulated Ctrl+V, which is fast and avoids issues with special characters. If clipboard access fails, or the input backend does not support the paste shortcut, the app automatically falls back to typing the text character by character. The other supported values (`pynput`, `ydotool`, `dotool`) always type character by character and can be selected instead from the Settings window if pasting is not desired.
+
+**Transcription history:** every dictation (regardless of input method) is appended to `transcription_history.txt` in the project root before it is delivered to the active window, each entry prefixed with a timestamp. This is a power-cut/crash safeguard: if the target application never received the paste/keystrokes, or the machine loses power right after a dictation, the transcribed text is not lost — it can be recovered from this plain-text file. The file grows indefinitely (it is never rotated or cleared automatically); it may contain sensitive dictated content, so handle it accordingly.
 
 ## Troubleshooting
 
