@@ -170,6 +170,17 @@ class WhisperWriterApp(QObject):
         When the transcription is complete, save it to the history, type the
         result, and start listening for the activation key again.
         """
+        # ResultThread emits an empty string to signal a transcription error.
+        # Treat it as a no-op delivery: saving it, overwriting the last
+        # transcription, or typing it would clobber the clipboard and inject a
+        # stray Ctrl+V. Still re-arm the hotkey so the app stays responsive.
+        if not result or not result.strip():
+            if ConfigManager.get_config_value('recording_options', 'recording_mode') == 'continuous':
+                self.start_result_thread()
+            else:
+                self.key_listener.start()
+            return
+
         try:
             append_transcription(result)
         except OSError as e:
@@ -188,8 +199,11 @@ class WhisperWriterApp(QObject):
 
     def copy_last_transcription(self):
         """
-        Copy the most recent transcription to the clipboard.
+        Copy the most recent transcription to the clipboard. Does nothing when
+        there is no transcription yet, to avoid clearing the user's clipboard.
         """
+        if not self.last_transcription:
+            return
         QApplication.clipboard().setText(self.last_transcription)
 
     def run(self):
