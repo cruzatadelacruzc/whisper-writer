@@ -1,7 +1,7 @@
 import sys
 import os
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer
-from PyQt5.QtGui import QFont, QPixmap, QIcon
+from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QLabel, QHBoxLayout
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))

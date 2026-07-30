@@ -1,8 +1,6 @@
 import os
 import sys
-import time
 from audioplayer import AudioPlayer
-from pynput.keyboard import Controller
 from PyQt5.QtCore import QObject, QProcess
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox
@@ -50,7 +48,6 @@ class WhisperWriterApp(QObject):
         self.key_listener.add_callback("on_deactivate", self.on_deactivation)
 
         model_options = ConfigManager.get_config_section('model_options')
-        model_path = model_options.get('local', {}).get('model_path')
         self.local_model = create_local_model() if not model_options.get('use_api') else None
 
         self.result_thread = None

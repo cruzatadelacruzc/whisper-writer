@@ -1,6 +1,7 @@
+import threading
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from typing import Callable, Set
+from typing import Callable, List, Optional, Set
 
 from utils import ConfigManager
 
@@ -69,13 +70,13 @@ class KeyCode(Enum):
     F = auto()
     G = auto()
     H = auto()
-    I = auto()
+    I = auto()  # noqa: E741 -- physical key name, consistent with sibling A-Z members; not a loop/index var
     J = auto()
     K = auto()
     L = auto()
     M = auto()
     N = auto()
-    O = auto()
+    O = auto()  # noqa: E741 -- physical key name, consistent with sibling A-Z members; not a loop/index var
     P = auto()
     Q = auto()
     R = auto()
@@ -433,6 +434,7 @@ class EvdevBackend(InputBackend):
 
     def __init__(self):
         """Initialize the EvdevBackend."""
+        import evdev
         self.devices: List[evdev.InputDevice] = []
         self.key_map: Optional[dict] = None
         self.evdev = None
@@ -753,7 +755,7 @@ class PynputBackend(InputBackend):
     def is_available(cls) -> bool:
         """Check if pynput library is available."""
         try:
-            import pynput
+            import pynput  # noqa: F401 -- imported only to test availability; the ImportError is the check
             return True
         except ImportError:
             return False
