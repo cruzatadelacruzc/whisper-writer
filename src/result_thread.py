@@ -2,8 +2,6 @@ import time
 import traceback
 import numpy as np
 import sounddevice as sd
-import tempfile
-import wave
 import webrtcvad
 from PyQt5.QtCore import QThread, QMutex, pyqtSignal
 from collections import deque
@@ -97,7 +95,7 @@ class ResultThread(QThread):
             self.statusSignal.emit('idle')
             self.resultSignal.emit(result)
 
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             self.statusSignal.emit('error')
             self.resultSignal.emit('')
@@ -179,7 +177,7 @@ class ResultThread(QThread):
         min_duration_ms = recording_options.get('min_duration') or 100
 
         if (duration * 1000) < min_duration_ms:
-            ConfigManager.console_print(f'Discarded due to being too short.')
+            ConfigManager.console_print('Discarded due to being too short.')
             return None
 
         return audio_data
