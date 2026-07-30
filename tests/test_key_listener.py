@@ -32,3 +32,15 @@ def test_evdev_backend_unavailable_when_import_fails():
     import key_listener
     with patch.dict(sys.modules, {'evdev': None}):
         assert key_listener.EvdevBackend.is_available() is False
+
+
+def test_evdev_backend_instantiates_without_module_scope_evdev():
+    """
+    EvdevBackend.__init__ evaluates runtime annotations (List, evdev.InputDevice)
+    and uses a function-local evdev import; regression for the NameError that
+    crashed instantiation when evdev names were missing at module scope.
+    """
+    import key_listener
+    with patch.dict(sys.modules, {'evdev': _fake_evdev(['/dev/input/event0'])}):
+        backend = key_listener.EvdevBackend()
+        assert backend is not None
