@@ -145,9 +145,10 @@ post_processing:
   input_method:
     value: pynput
     type: str
-    description: "The method to use for simulating keyboard input."
+    description: "The method to use for delivering the transcribed text. 'clipboard' pastes the whole text at once via Ctrl+V (fastest); the others type it character by character."
     options:
       - pynput
+      - clipboard
       - ydotool
       - dotool
 

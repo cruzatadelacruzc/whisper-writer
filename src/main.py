@@ -14,6 +14,7 @@ from ui.settings_window import SettingsWindow
 from ui.status_window import StatusWindow
 from transcription import create_local_model
 from input_simulation import InputSimulator
+from transcription_history import append_transcription
 from utils import ConfigManager
 
 
@@ -54,10 +55,12 @@ class WhisperWriterApp(QObject):
 
         self.result_thread = None
 
+        self.last_transcription = ''
         self.main_window = MainWindow()
         self.main_window.openSettings.connect(self.settings_window.show)
         self.main_window.startListening.connect(self.key_listener.start)
         self.main_window.closeApp.connect(self.exit_app)
+        self.main_window.copyLast.connect(self.copy_last_transcription)
 
         if not ConfigManager.get_config_value('misc', 'hide_status_window'):
             self.status_window = StatusWindow()
@@ -164,8 +167,26 @@ class WhisperWriterApp(QObject):
 
     def on_transcription_complete(self, result):
         """
-        When the transcription is complete, type the result and start listening for the activation key again.
+        When the transcription is complete, save it to the history, type the
+        result, and start listening for the activation key again.
         """
+        # ResultThread emits an empty string to signal a transcription error.
+        # Treat it as a no-op delivery: saving it, overwriting the last
+        # transcription, or typing it would clobber the clipboard and inject a
+        # stray Ctrl+V. Still re-arm the hotkey so the app stays responsive.
+        if not result or not result.strip():
+            if ConfigManager.get_config_value('recording_options', 'recording_mode') == 'continuous':
+                self.start_result_thread()
+            else:
+                self.key_listener.start()
+            return
+
+        try:
+            append_transcription(result)
+        except OSError as e:
+            print(f'Could not save transcription history: {e}')
+
+        self.last_transcription = result
         self.input_simulator.typewrite(result)
 
         if ConfigManager.get_config_value('misc', 'noise_on_completion'):
@@ -175,6 +196,15 @@ class WhisperWriterApp(QObject):
             self.start_result_thread()
         else:
             self.key_listener.start()
+
+    def copy_last_transcription(self):
+        """
+        Copy the most recent transcription to the clipboard. Does nothing when
+        there is no transcription yet, to avoid clearing the user's clipboard.
+        """
+        if not self.last_transcription:
+            return
+        QApplication.clipboard().setText(self.last_transcription)
 
     def run(self):
         """
