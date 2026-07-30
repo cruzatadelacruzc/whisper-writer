@@ -419,11 +419,16 @@ class EvdevBackend(InputBackend):
 
     @classmethod
     def is_available(cls) -> bool:
-        """Check if the evdev library is available."""
+        """
+        Check that evdev is importable AND at least one input device is
+        accessible. Without read permission on /dev/input/event* (user not
+        in the 'input' group), list_devices() is empty and the backend
+        would silently listen to nothing.
+        """
         try:
             import evdev
-            return True
-        except ImportError:
+            return bool(evdev.list_devices())
+        except (ImportError, OSError):
             return False
 
     def __init__(self):
