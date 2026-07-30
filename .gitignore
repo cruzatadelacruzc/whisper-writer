@@ -130,3 +130,6 @@ dmypy.json
 
 # Configuration files
 config.yaml
+
+# Local transcription history (may contain sensitive dictated content)
+transcription_history.txt
