@@ -9,7 +9,7 @@ import os
 import sys
 import types
 import warnings
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -121,8 +121,9 @@ def test_start_result_thread_returns_early_when_model_not_loaded():
 
 
 def test_on_start_pressed_arms_listener_and_runs_activation_path():
-    """Start behaves like pressing the hotkey: arm + same toggle path."""
+    """Start behaves like pressing the hotkey: arm + same toggle path.
+    The exact call sequence matters: arming must precede the toggle."""
     fake_self = MagicMock()
     main.WhisperWriterApp.on_start_pressed(fake_self)
-    fake_self.key_listener.start.assert_called_once_with()
-    fake_self.on_activation.assert_called_once_with()
+    assert fake_self.mock_calls == [call.key_listener.start(),
+                                    call.on_activation()]
