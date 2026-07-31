@@ -118,3 +118,11 @@ def test_start_result_thread_returns_early_when_model_not_loaded():
     with patch.object(main, 'ResultThread') as result_thread_cls:
         main.WhisperWriterApp.start_result_thread(self_mock)
     result_thread_cls.assert_not_called()
+
+
+def test_on_start_pressed_arms_listener_and_runs_activation_path():
+    """Start behaves like pressing the hotkey: arm + same toggle path."""
+    fake_self = MagicMock()
+    main.WhisperWriterApp.on_start_pressed(fake_self)
+    fake_self.key_listener.start.assert_called_once_with()
+    fake_self.on_activation.assert_called_once_with()

@@ -57,7 +57,7 @@ class WhisperWriterApp(QObject):
         self.last_transcription = ''
         self.main_window = MainWindow()
         self.main_window.openSettings.connect(self.settings_window.show)
-        self.main_window.startListening.connect(self.key_listener.start)
+        self.main_window.startListening.connect(self.on_start_pressed)
         self.main_window.closeApp.connect(self.exit_app)
         self.main_window.copyLast.connect(self.copy_last_transcription)
 
@@ -88,6 +88,15 @@ class WhisperWriterApp(QObject):
         self.main_window.setModelError()
         QMessageBox.warning(self.main_window, 'WhisperWriter',
                             f'Could not load the Whisper model:\n{message}')
+
+    def on_start_pressed(self):
+        """The Start button behaves like pressing the hotkey: arm the
+        listener, then run the same toggle path (start or stop recording).
+        The window hides itself on click, so focus returns to the target
+        app; the user stops with the hotkey (or by clicking Start again
+        after reopening the window from the tray)."""
+        self.key_listener.start()
+        self.on_activation()
 
     def create_tray_icon(self):
         """
@@ -172,9 +181,11 @@ class WhisperWriterApp(QObject):
         if self.result_thread and self.result_thread.isRunning():
             return
 
-        # The hotkey is only armed via Start (disabled until the model is
-        # ready), but guard anyway: ResultThread with local_model=None would
-        # sync-load the model inside the recording thread.
+        # Start is disabled until the model is ready, but the hotkey can be
+        # armed before that (an explicit input_backend arms it at startup):
+        # without this guard a hotkey press would hand local_model=None to
+        # ResultThread, which would sync-load the model inside the
+        # recording thread.
         if self.local_model is None and not self.use_api:
             return
 
