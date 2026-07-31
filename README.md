@@ -139,9 +139,59 @@ It must be run **from the project root** on both systems.
 
 - The main window appears within a few seconds showing **“Loading model…”** with the Start button disabled; when the label changes to **“Model ready”**, Start is enabled and you can begin dictating. If loading fails, the label shows *“Model load failed — check Settings”* — fix the model configuration in Settings (saving restarts the application, which retries the load).
 - The application sits as a system tray icon.
-- Dictation hotkey: **`ctrl+shift+space`** (configurable). The hotkey is armed by pressing **Start**.
+- Dictation hotkey: **`ctrl+shift+space`** (configurable). **Start does not record by itself — it arms the hotkey**; recording begins when you press the hotkey (that is when the status overlay appears).
 - The `pkg_resources is deprecated` warning at startup is harmless: ignore it.
-- The main window (tray icon → WhisperWriter Main Menu) has three buttons: **Start** (begin a dictation), **Settings** (open the Settings window), and **Copy Last** (re-copy the most recent transcription to the clipboard, in case the original paste was missed or overwritten), plus the model status label described above.
+- The main window (tray icon → WhisperWriter Main Menu) has three buttons: **Start** (arm the dictation hotkey), **Settings** (open the Settings window), and **Copy Last** (re-copy the most recent transcription to the clipboard, in case the original paste was missed or overwritten), plus the model status label described above.
+
+## The dictation flow, step by step
+
+1. Wait for **Model ready**, press **Start** (the window hides; the hotkey is now armed).
+2. Place the cursor in the target document and press **`ctrl+shift+space`** — the status overlay shows *recording*.
+3. Speak one phrase. Recording stops on its own after ~0.9 s of silence (`recording_options.silence_duration`), the overlay shows *transcribing*, and the text is pasted into the active window.
+4. What happens next depends on `recording_options.recording_mode`:
+
+| `recording_mode` | After each phrase | Best for |
+|---|---|---|
+| `press_to_toggle` *(project recommendation)* | Recording **stops**; press the hotkey again for the next phrase. Pressing the hotkey mid-recording stops it manually. | Dictating discrete report sentences with pauses to think — no accidental recordings between phrases. |
+| `continuous` *(upstream default)* | The app **keeps listening** and auto-starts a new recording at the next voice activity, until you press the hotkey again to stop the cycle. | Dictating long passages hands-free. Caveat: ambient noise can trigger phantom recordings between real phrases — see the recommended configuration below. |
+| `voice_activity_detection` | Like a single-shot `continuous`: one recording, stops at silence, done. | One-off dictations. |
+| `hold_to_record` | Records only while the hotkey is held down. | Walkie-talkie style, full manual control. |
+
+## Recommended configuration (Spanish medical dictation)
+
+The configuration this project converged on after live testing on real radiology dictation — each line exists for a reason:
+
+```yaml
+model_options:
+  common:
+    language: es
+    # Vocabulary list (not a sentence): biases Whisper toward radiology terms.
+    # Keep it a list — a sentence-shaped prompt can be echoed verbatim into
+    # near-silent recordings and end up pasted as if dictated.
+    initial_prompt: "Radiografía de tórax, silueta cardiomediastínica, trama broncovascular, consolidación, derrame pleural, neumotórax, campos pulmonares, estructuras óseas, impresión diagnóstica."
+  local:
+    model: medium       # small is noticeably worse on Spanish medical terms
+    device: cpu
+    compute_type: int8
+    # Anti-hallucination pair: without these, trailing/ambient silence gets
+    # transcribed as YouTube-subtitle credits ("Subtítulos por la comunidad
+    # de Amara.org", "¡Gracias por ver el vídeo!").
+    vad_filter: true
+    condition_on_previous_text: false
+recording_options:
+  recording_mode: press_to_toggle
+  # Phantom VAD triggers from ambient noise last ~1.2 s (noise + the 0.9 s
+  # silence tail); discard anything shorter before transcribing.
+  min_duration: 1400
+post_processing:
+  input_method: clipboard
+```
+
+Notes:
+
+- `medium` is the accuracy/speed sweet spot for clinical Spanish on CPU; transcription takes roughly the duration of the phrase on an older i3-class machine. `small` halves the wait but garbles medical terms (*"tórax" → "tólas"* in our tests) — only worth it on very weak hardware and non-critical text.
+- If you prefer hands-free flow, switch `recording_mode` to `continuous`; `min_duration`, `vad_filter` and the list-shaped prompt above are what keep phantom recordings and hallucinated text in check in that mode.
+- All of this can also be changed from the Settings window (saving restarts the app).
 
 ## Configuration
 

@@ -50,7 +50,7 @@ venv/bin/pip install -r requirements.txt -r requirements-dev.txt "setuptools<81"
 
 ## Configuration
 
-- User config: `src/config.yaml` — partial merge over the defaults in `src/config_schema.yaml`; only declare what changes. Current state: `model: medium`, `language: es`, `device: cpu`, `compute_type: int8`, `input_method: clipboard`.
+- User config: `src/config.yaml` — partial merge over the defaults in `src/config_schema.yaml`; only declare what changes. Current state: `model: medium`, `language: es`, `device: cpu`, `compute_type: int8`, `input_method: clipboard`, plus the anti-hallucination set (`vad_filter: true`, `condition_on_previous_text: false`, list-shaped `initial_prompt`, `min_duration: 1400`) and `recording_mode: press_to_toggle` — the rationale for each is in README "Recommended configuration".
 - There is no "Spanish medium" model: `medium` is multilingual and Spanish is set via `language: es`. The `.en` variants are English-only.
 - Saving from the app's Settings window **rewrites the entire `src/config.yaml`** (and restarts the app).
 - Models are cached in `~/.cache/huggingface`; faster-whisper uses the `Systran/faster-whisper-*` repos. Alternatively `model_options.local.model_path` points at a plain model folder (offline installs — see README).
