@@ -4,6 +4,7 @@ import numpy as np
 import soundfile as sf
 
 from utils import ConfigManager
+from hallucination_filter import filter_transcription
 
 def create_local_model():
     """
@@ -92,7 +93,11 @@ def post_process_transcription(transcription):
     """
     Apply post-processing to the transcription.
     """
-    transcription = transcription.strip()
+    model_options = ConfigManager.get_config_section('model_options')
+    transcription = filter_transcription(
+        transcription, model_options['common']['initial_prompt'])
+    if not transcription:
+        return ''
     post_processing = ConfigManager.get_config_section('post_processing')
     if post_processing['remove_trailing_period'] and transcription.endswith('.'):
         transcription = transcription[:-1]

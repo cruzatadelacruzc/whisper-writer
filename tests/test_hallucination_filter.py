@@ -116,3 +116,26 @@ def test_short_prompt_whole_prompt_fallback():
     assert filter_transcription(
         'Sin hallazgos agudos. Silueta cardiomediastínica, trama broncovascular',
         short_prompt) == 'Sin hallazgos agudos.'
+
+
+def test_post_process_returns_empty_for_pure_hallucination():
+    """Integration: the filter runs first inside post_process_transcription,
+    and a fully-filtered result skips the trailing-space handling."""
+    from unittest.mock import patch
+    import transcription
+
+    def fake_section(name):
+        return {
+            'model_options': {'common': {'initial_prompt': PROMPT}},
+            'post_processing': {'remove_trailing_period': False,
+                                'add_trailing_space': True,
+                                'remove_capitalization': False},
+        }[name]
+
+    with patch.object(transcription.ConfigManager, 'get_config_section',
+                      side_effect=fake_section):
+        assert transcription.post_process_transcription(
+            'Subtítulos por la comunidad de Amara.org') == ''
+        # Real text still gets the normal post-processing (trailing space).
+        assert transcription.post_process_transcription(
+            'Sin hallazgos agudos.') == 'Sin hallazgos agudos. '
