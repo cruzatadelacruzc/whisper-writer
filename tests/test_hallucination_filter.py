@@ -139,3 +139,8 @@ def test_post_process_returns_empty_for_pure_hallucination():
         # Real text still gets the normal post-processing (trailing space).
         assert transcription.post_process_transcription(
             'Sin hallazgos agudos.') == 'Sin hallazgos agudos. '
+        # Echo-dependent case: proves the configured initial_prompt reaches
+        # the filter — with a hardcoded None the echo would be delivered.
+        assert transcription.post_process_transcription(
+            'Radiografía de tórax, silueta cardiomediastínica, '
+            'trama broncovascular.') == ''
