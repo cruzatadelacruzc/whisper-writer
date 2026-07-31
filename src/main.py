@@ -10,7 +10,7 @@ from result_thread import ResultThread
 from ui.main_window import MainWindow
 from ui.settings_window import SettingsWindow
 from ui.status_window import StatusWindow
-from transcription import create_local_model
+from model_load_thread import ModelLoadThread
 from input_simulation import InputSimulator
 from transcription_history import append_transcription
 from utils import ConfigManager
@@ -48,7 +48,9 @@ class WhisperWriterApp(QObject):
         self.key_listener.add_callback("on_deactivate", self.on_deactivation)
 
         model_options = ConfigManager.get_config_section('model_options')
-        self.local_model = create_local_model() if not model_options.get('use_api') else None
+        self.use_api = bool(model_options.get('use_api'))
+        self.local_model = None
+        self.model_load_thread = None
 
         self.result_thread = None
 
@@ -64,6 +66,28 @@ class WhisperWriterApp(QObject):
 
         self.create_tray_icon()
         self.main_window.show()
+
+        if self.use_api:
+            self.main_window.setModelReady()
+        else:
+            self.main_window.setModelLoading()
+            self.model_load_thread = ModelLoadThread()
+            self.model_load_thread.modelReady.connect(self.on_model_ready)
+            self.model_load_thread.loadFailed.connect(self.on_model_load_failed)
+            self.model_load_thread.start()
+
+    def on_model_ready(self, model):
+        """The background loader finished: store the model and unlock Start."""
+        self.local_model = model
+        self.main_window.setModelReady()
+
+    def on_model_load_failed(self, message):
+        """Loading failed: surface the error and leave Start blocked.
+        Recovery path: fix Settings — saving restarts the app, retrying the load."""
+        print(f'Model load failed: {message}')
+        self.main_window.setModelError()
+        QMessageBox.warning(self.main_window, 'WhisperWriter',
+                            f'Could not load the Whisper model:\n{message}')
 
     def create_tray_icon(self):
         """
@@ -146,6 +170,12 @@ class WhisperWriterApp(QObject):
         Start the result thread to record audio and transcribe it.
         """
         if self.result_thread and self.result_thread.isRunning():
+            return
+
+        # The hotkey is only armed via Start (disabled until the model is
+        # ready), but guard anyway: ResultThread with local_model=None would
+        # sync-load the model inside the recording thread.
+        if self.local_model is None and not self.use_api:
             return
 
         self.result_thread = ResultThread(self.local_model)
