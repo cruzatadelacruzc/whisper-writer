@@ -28,6 +28,9 @@ class MainWindow(BaseWindow):
         self.start_btn.setFont(QFont('Segoe UI', 10))
         self.start_btn.setFixedSize(120, 60)
         self.start_btn.clicked.connect(self.startPressed)
+        # Born disabled: only the model-state methods (setModelLoading /
+        # setModelReady / setModelError) control this button.
+        self.start_btn.setEnabled(False)
 
         settings_btn = QPushButton('Settings')
         settings_btn.setFont(QFont('Segoe UI', 10))

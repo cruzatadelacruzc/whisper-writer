@@ -22,6 +22,11 @@ class WhisperWriterApp(QObject):
         Initialize the application, opening settings window if no configuration file is found.
         """
         super().__init__()
+        # Pre-set so cleanup()/restart_app() are safe even if
+        # initialize_components() never ran (first run: Settings only).
+        self.key_listener = None
+        self.input_simulator = None
+        self.components_initialized = False
         self.app = QApplication(sys.argv)
         self.app.setWindowIcon(QIcon(os.path.join('assets', 'ww-logo.png')))
 
@@ -75,6 +80,8 @@ class WhisperWriterApp(QObject):
             self.model_load_thread.modelReady.connect(self.on_model_ready)
             self.model_load_thread.loadFailed.connect(self.on_model_load_failed)
             self.model_load_thread.start()
+
+        self.components_initialized = True
 
     def on_model_ready(self, model):
         """The background loader finished: store the model and unlock Start."""
@@ -144,6 +151,8 @@ class WhisperWriterApp(QObject):
         """
         If settings is closed without saving on first run, initialize the components with default values.
         """
+        if self.components_initialized:
+            return
         if not os.path.exists(os.path.join('src', 'config.yaml')):
             QMessageBox.information(
                 self.settings_window,

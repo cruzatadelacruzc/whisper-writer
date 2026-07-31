@@ -127,3 +127,52 @@ def test_on_start_pressed_arms_listener_and_runs_activation_path():
     main.WhisperWriterApp.on_start_pressed(fake_self)
     assert fake_self.mock_calls == [call.key_listener.start(),
                                     call.on_activation()]
+
+
+def test_on_model_ready_stores_model_and_unlocks_window():
+    fake_self = MagicMock()
+    model = object()
+    main.WhisperWriterApp.on_model_ready(fake_self, model)
+    assert fake_self.local_model is model
+    fake_self.main_window.setModelReady.assert_called_once_with()
+
+
+def test_on_model_load_failed_shows_error_state_and_warning():
+    fake_self = MagicMock()
+    with patch.object(main.QMessageBox, 'warning') as warning:
+        main.WhisperWriterApp.on_model_load_failed(fake_self, 'boom')
+    fake_self.main_window.setModelError.assert_called_once_with()
+    warning.assert_called_once()
+    assert 'boom' in warning.call_args[0][2]
+
+
+def test_cleanup_tolerates_never_initialized_components():
+    """First run: saving Settings triggers restart_app -> cleanup() before
+    initialize_components() ever ran. __init__ now pre-sets the attributes
+    to None, and cleanup's guards must accept that."""
+    fake_self = MagicMock()
+    fake_self.key_listener = None
+    fake_self.input_simulator = None
+    main.WhisperWriterApp.cleanup(fake_self)  # must not raise
+
+
+def test_on_settings_closed_skips_when_already_initialized():
+    """Closing Settings unsaved more than once must not initialize the
+    components again (duplicate tray icon / listeners). os.path.exists is
+    patched to False so the test exercises the flag, not the real
+    config.yaml on this machine."""
+    fake_self = MagicMock()
+    fake_self.components_initialized = True
+    with patch.object(main.os.path, 'exists', return_value=False), \
+         patch.object(main.QMessageBox, 'information'):
+        main.WhisperWriterApp.on_settings_closed(fake_self)
+    fake_self.initialize_components.assert_not_called()
+
+
+def test_on_settings_closed_initializes_on_first_run():
+    fake_self = MagicMock()
+    fake_self.components_initialized = False
+    with patch.object(main.os.path, 'exists', return_value=False), \
+         patch.object(main.QMessageBox, 'information'):
+        main.WhisperWriterApp.on_settings_closed(fake_self)
+    fake_self.initialize_components.assert_called_once_with()
