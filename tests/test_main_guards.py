@@ -105,3 +105,16 @@ def test_valid_result_is_delivered_and_saved():
     fake_self.input_simulator.typewrite.assert_called_once_with('hola mundo')
     assert fake_self.last_transcription == 'hola mundo'
     fake_self.key_listener.start.assert_called_once()
+
+
+def test_start_result_thread_returns_early_when_model_not_loaded():
+    """Local mode with the model still loading: start_result_thread must not
+    build a ResultThread (transcribe_local would otherwise sync-load the
+    model inside the recording thread)."""
+    self_mock = MagicMock()
+    self_mock.result_thread = None
+    self_mock.local_model = None
+    self_mock.use_api = False
+    with patch.object(main, 'ResultThread') as result_thread_cls:
+        main.WhisperWriterApp.start_result_thread(self_mock)
+    result_thread_cls.assert_not_called()

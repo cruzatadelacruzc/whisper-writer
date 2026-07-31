@@ -2,8 +2,6 @@ import io
 import os
 import numpy as np
 import soundfile as sf
-from faster_whisper import WhisperModel
-from openai import OpenAI
 
 from utils import ConfigManager
 
@@ -11,6 +9,7 @@ def create_local_model():
     """
     Create a local model using the faster-whisper library.
     """
+    from faster_whisper import WhisperModel  # deferred: heavy import paid in the loader thread
     ConfigManager.console_print('Creating local model...')
     local_model_options = ConfigManager.get_config_section('model_options')['local']
     compute_type = local_model_options['compute_type']
@@ -67,6 +66,7 @@ def transcribe_api(audio_data):
     """
     Transcribe an audio file using the OpenAI API.
     """
+    from openai import OpenAI  # deferred: only needed in API mode
     model_options = ConfigManager.get_config_section('model_options')
     client = OpenAI(
         api_key=os.getenv('OPENAI_API_KEY') or None,
