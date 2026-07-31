@@ -63,3 +63,43 @@ def test_empty_and_whitespace_input():
     assert filter_transcription('', PROMPT) == ''
     assert filter_transcription('   \n ', PROMPT) == ''
     assert filter_transcription(None, PROMPT) == ''
+
+
+def test_full_echo_of_three_terms_is_discarded():
+    # Terms 1-3 of the prompt, verbatim and consecutive → echo.
+    assert filter_transcription(
+        'Radiografía de tórax, silueta cardiomediastínica, '
+        'trama broncovascular.', PROMPT) == ''
+
+
+def test_whole_prompt_echo_is_discarded():
+    assert filter_transcription(PROMPT, PROMPT) == ''
+
+
+def test_one_or_two_terms_are_never_discarded():
+    # Below the MIN_ECHO_TERMS=3 threshold: legitimate short dictations.
+    assert filter_transcription('Derrame pleural.', PROMPT) == 'Derrame pleural.'
+    assert filter_transcription(
+        'derrame pleural, neumotórax', PROMPT) == 'derrame pleural, neumotórax'
+
+
+def test_dictation_with_connectors_is_not_an_echo():
+    # Contains prompt terms, but with the speaker's own connective words.
+    text = ('Se observa consolidación basal derecha sin derrame pleural '
+            'ni neumotórax.')
+    assert filter_transcription(text, PROMPT) == text
+
+
+def test_trailing_echo_is_trimmed_real_text_kept():
+    # Terms 4-7 of the prompt glued to the end of a real dictation.
+    assert filter_transcription(
+        'Estudio dentro de límites normales. Consolidación, derrame '
+        'pleural, neumotórax, campos pulmonares',
+        PROMPT) == 'Estudio dentro de límites normales.'
+
+
+def test_none_prompt_disables_echo_but_keeps_blacklist():
+    assert filter_transcription('¡Gracias por ver el vídeo!', None) == ''
+    text = ('Radiografía de tórax, silueta cardiomediastínica, '
+            'trama broncovascular.')
+    assert filter_transcription(text, None) == text

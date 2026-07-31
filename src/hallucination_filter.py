@@ -22,6 +22,10 @@ KNOWN_HALLUCINATIONS = [
     'Gracias por ver',
 ]
 
+# An echo must span at least this many consecutive prompt terms to be
+# discarded or trimmed: dictations of one or two real terms must survive.
+MIN_ECHO_TERMS = 3
+
 
 def _normalize_with_map(text):
     """Normalize for comparison, keeping a map back to the original string.
@@ -91,6 +95,39 @@ def _strip_blacklist(text):
     return text
 
 
+def _prompt_ngrams(initial_prompt):
+    """Normalized consecutive runs of >= MIN_ECHO_TERMS prompt terms.
+
+    The whole prompt is always included, which also covers prompts shorter
+    than the threshold.
+    """
+    if not initial_prompt:
+        return set()
+    terms = [_normalize(t) for t in initial_prompt.split(',')]
+    terms = [t for t in terms if t]
+    ngrams = set()
+    for n in range(MIN_ECHO_TERMS, len(terms) + 1):
+        for i in range(len(terms) - n + 1):
+            ngrams.add(' '.join(terms[i:i + n]))
+    whole = _normalize(initial_prompt)
+    if whole:
+        ngrams.add(whole)
+    return ngrams
+
+
+def _trim_echo_tail(text, ngrams):
+    """If the text ends with an echoed prompt run, cut that tail off."""
+    norm, idx_map = _normalize_with_map(text)
+    best = None
+    for g in ngrams:
+        if norm.endswith(' ' + g) and (best is None or len(g) > len(best)):
+            best = g
+    if best is None:
+        return text
+    tail_start = idx_map[len(norm) - len(best)]
+    return text[:tail_start].rstrip(' \t\n,;')
+
+
 def filter_transcription(text, initial_prompt):
     """Return `text` cleaned of known hallucinations, or '' to discard it.
 
@@ -100,6 +137,12 @@ def filter_transcription(text, initial_prompt):
     if not text or not text.strip():
         return ''
     text = _strip_blacklist(text)
-    if not _normalize(text):
+    norm = _normalize(text)
+    if not norm:
         return ''
+    ngrams = _prompt_ngrams(initial_prompt)
+    if ngrams:
+        if norm in ngrams:
+            return ''
+        text = _trim_echo_tail(text, ngrams)
     return text.strip()
