@@ -103,3 +103,16 @@ def test_none_prompt_disables_echo_but_keeps_blacklist():
     text = ('Radiografía de tórax, silueta cardiomediastínica, '
             'trama broncovascular.')
     assert filter_transcription(text, None) == text
+
+
+def test_short_prompt_whole_prompt_fallback():
+    """A prompt with fewer than MIN_ECHO_TERMS terms still catches echoes
+    via the whole-prompt entry in the ngram set."""
+    short_prompt = 'silueta cardiomediastínica, trama broncovascular'
+    # Full echo of the whole (2-term) prompt is discarded...
+    assert filter_transcription(
+        'Silueta cardiomediastínica, trama broncovascular.', short_prompt) == ''
+    # ...and a trailing echo of it is trimmed off real text.
+    assert filter_transcription(
+        'Sin hallazgos agudos. Silueta cardiomediastínica, trama broncovascular',
+        short_prompt) == 'Sin hallazgos agudos.'
