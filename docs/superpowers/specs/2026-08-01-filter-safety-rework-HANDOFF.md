@@ -1,9 +1,16 @@
 # HANDOFF — hallucination-filter safety rework (pick up in a fresh session)
 
 **Date:** 2026-08-01 · **Branch:** `feature/hallucination-filter-and-start` · **Open PR:** #9 → `develop`
-**Status:** ⚠️ **DO NOT MERGE PR #9 as-is.** The final whole-branch review found 3 confirmed
-correctness defects in `src/hallucination_filter.py`. Fixes are designed and user-approved but
-**not yet implemented** — the session that got here ran too long and was closed deliberately.
+
+> **UPDATE 2026-08-01 — the filter safety rework is DONE (commit `b446fc5`, option A).** The 3
+> defects in §2 are fixed and verified (55/55 suite green, ruff clean); the §3 decisions and §4
+> option **A** were implemented. What REMAINS is only the **notification follow-up in §5** (its own
+> branch/PR) and, bundled with it, the partial trailing-echo trim. PR #9 is no longer merge-blocked
+> on correctness — only the user's live gate remains. The rest of this doc is kept as the record of
+> why the filter looks the way it does and as the spec for the §5 follow-up.
+
+**Original status (now resolved):** ⚠️ The final whole-branch review found 3 confirmed correctness
+defects in `src/hallucination_filter.py`. Fixes were designed and user-approved.
 
 This document is self-contained: a new agent should be able to execute the rework from it alone.
 Cross-check with the SDD ledger `.superpowers/sdd/2026-07-31-hallucination-filter-and-start/progress.md`
@@ -73,11 +80,12 @@ loses it silently. These are safety defects, not style nits.
 3. **`initial_prompt` fail-open guard**: if it isn't a `str`, `_prompt_ngrams` returns `set()`
    (one-line `isinstance` guard) so the filter never crashes the transcription callback. (Minor.)
 
-## 4. THE ONE OPEN DECISION — ask the user first, do not assume
+## 4. THE ONE OPEN DECISION — RESOLVED 2026-08-01: user chose **A**
 
 **Prompt-echo TRAILING-TRIM ("colas de eco")** — the ambiguous op that can eat a tail the doctor
-actually dictated. The user has NOT chosen between these; they asked to defer the decision to a
-fresh session. Present both, recommend **A**:
+actually dictated. **Resolved: option A** — trailing-trim is NOT in this branch; it moves to the §5
+notification follow-up and ships together with the "text was trimmed" alert. (Original framing
+kept below for context.)
 
 - **A (recommended): move it to the notification follow-up.** This branch does NOT trim prompt-echo
   tails at all (only the whole-prompt full-discard of decision 3.2). Trailing-trim ships later,

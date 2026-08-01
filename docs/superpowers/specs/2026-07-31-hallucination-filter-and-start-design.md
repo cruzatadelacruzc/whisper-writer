@@ -2,6 +2,14 @@
 
 **Date:** 2026-07-31
 **Status:** Approved by user (brainstorming session)
+> **Revised 2026-08-01 (safety rework):** the prompt-echo design below (discard any
+> `>=3` consecutive-prompt-term run; trim trailing echoes) corrupted real Spanish
+> radiology dictation — the prompt lists the same terms a radiologist dictates, so
+> "Sin consolidación, derrame pleural, neumotórax" was turned into the inverted stub
+> "Sin". As shipped, the filter discards a prompt echo **only when the whole prompt is
+> reproduced verbatim**, and the blacklist is anchored to whole-utterance/trailing.
+> Partial trailing-echo trimming moved to a follow-up (with a user notice). See
+> `docs/superpowers/specs/2026-08-01-filter-safety-rework-HANDOFF.md`.
 **Scope:** One feature branch / PR to `develop` containing three things:
 (1) an in-code anti-hallucination filter (known-phrase blacklist + prompt-echo
 detection), (2) the Start button reworked to behave like pressing the global
