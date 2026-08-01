@@ -3,9 +3,20 @@
 The config-level mitigations (vad_filter, condition_on_previous_text: false,
 list-shaped initial_prompt, min_duration) stop most hallucinations, but two
 failure modes can still reach the output: stock phrases Whisper learned from
-subtitled video ("Subtítulos por la comunidad de Amara.org") and verbatim
-echoes of the initial_prompt. Both would be appended to the (medical) history
+subtitled video ("Subtítulos por la comunidad de Amara.org") and a verbatim
+echo of the initial_prompt. Both would be appended to the (medical) history
 file and pasted into the active window.
+
+This is a MEDICAL dictation tool, so the filter is deliberately conservative:
+it only removes text it can be sure the model inserted. A stock phrase is cut
+only when it is the WHOLE utterance or a TRAILING tail (word-bounded); it is
+never matched mid-word or mid-sentence. A prompt echo is discarded only when
+the whole prompt is reproduced verbatim — never a partial run, because the
+prompt lists the same anatomical terms a radiologist actually dictates (so
+"Sin consolidación, derrame pleural, neumotórax" is real speech, not an echo).
+Trimming a *partial* trailing prompt echo is intentionally deferred to a
+follow-up that ships it together with a user-facing "text was trimmed" notice
+(see docs/superpowers/specs/2026-08-01-filter-safety-rework-HANDOFF.md).
 
 Pure string processing — no Qt, no I/O, no config access: the caller passes
 the initial_prompt in (spec: 2026-07-31-hallucination-filter-and-start).
@@ -21,10 +32,6 @@ KNOWN_HALLUCINATIONS = [
     '¡Gracias por ver el vídeo!',
     'Gracias por ver',
 ]
-
-# An echo must span at least this many consecutive prompt terms to be
-# discarded or trimmed: dictations of one or two real terms must survive.
-MIN_ECHO_TERMS = 3
 
 
 def _normalize_with_map(text):
@@ -62,11 +69,15 @@ def _normalize(text):
 
 
 def _strip_blacklist(text):
-    """Cut every occurrence of every known phrase out of the original string.
+    """Cut a known stock phrase only when it is the whole utterance or a
+    trailing tail (word-bounded in the normalized string).
 
-    Longer phrases are matched first so that a phrase containing another
-    ("¡Gracias por ver el vídeo!" vs "Gracias por ver") is removed whole
-    instead of leaving a fragment behind.
+    Hallucinated announcements appear as the entire output or glued to the end,
+    never embedded in the middle of real dictation. Anchoring to whole/trailing
+    is what keeps "Muchas gracias por ver al paciente." or "gracias por
+    verificar" from being mangled. Longer phrases are tried first so that a
+    phrase containing another ("¡Gracias por ver el vídeo!" vs "Gracias por
+    ver") is removed whole instead of leaving a fragment behind.
     """
     phrases = sorted((_normalize(p) for p in KNOWN_HALLUCINATIONS),
                      key=len, reverse=True)
@@ -75,57 +86,18 @@ def _strip_blacklist(text):
         changed = False
         norm, idx_map = _normalize_with_map(text)
         for phrase in phrases:
-            pos = norm.find(phrase)
-            if pos == -1:
-                continue
-            start = idx_map[pos]
-            end = idx_map[pos + len(phrase) - 1] + 1
-            # Take the punctuation glued to the phrase with it ("...org.",
-            # "...vídeo!", leading "¡").
-            while end < len(text) and not text[end].isalnum() \
-                    and not text[end].isspace():
-                end += 1
-            while start > 0 and text[start - 1] in '¡¿"\'(':
-                start -= 1
-            left = text[:start].rstrip()
-            right = text[end:].lstrip()
-            text = (left + ' ' + right) if left and right else (left or right)
-            changed = True
-            break
+            if norm == phrase:
+                return ''
+            if norm.endswith(' ' + phrase):
+                start = idx_map[len(norm) - len(phrase)]
+                # Absorb any opening punctuation glued before the phrase
+                # ("... ¡Gracias por ver el vídeo!").
+                while start > 0 and text[start - 1] in '¡¿"\'(':
+                    start -= 1
+                text = text[:start].rstrip(' \t\n,;')
+                changed = True
+                break
     return text
-
-
-def _prompt_ngrams(initial_prompt):
-    """Normalized consecutive runs of >= MIN_ECHO_TERMS prompt terms.
-
-    The whole prompt is always included, which also covers prompts shorter
-    than the threshold.
-    """
-    if not initial_prompt:
-        return set()
-    terms = [_normalize(t) for t in initial_prompt.split(',')]
-    terms = [t for t in terms if t]
-    ngrams = set()
-    for n in range(MIN_ECHO_TERMS, len(terms) + 1):
-        for i in range(len(terms) - n + 1):
-            ngrams.add(' '.join(terms[i:i + n]))
-    whole = _normalize(initial_prompt)
-    if whole:
-        ngrams.add(whole)
-    return ngrams
-
-
-def _trim_echo_tail(text, ngrams):
-    """If the text ends with an echoed prompt run, cut that tail off."""
-    norm, idx_map = _normalize_with_map(text)
-    best = None
-    for g in ngrams:
-        if norm.endswith(' ' + g) and (best is None or len(g) > len(best)):
-            best = g
-    if best is None:
-        return text
-    tail_start = idx_map[len(norm) - len(best)]
-    return text[:tail_start].rstrip(' \t\n,;')
 
 
 def filter_transcription(text, initial_prompt):
@@ -140,9 +112,10 @@ def filter_transcription(text, initial_prompt):
     norm = _normalize(text)
     if not norm:
         return ''
-    ngrams = _prompt_ngrams(initial_prompt)
-    if ngrams:
-        if norm in ngrams:
+    # Discard only a verbatim echo of the WHOLE prompt. A non-string prompt
+    # (a hand-edited YAML list) disables echo detection rather than crashing.
+    if isinstance(initial_prompt, str):
+        prompt_norm = _normalize(initial_prompt)
+        if prompt_norm and norm == prompt_norm:
             return ''
-        text = _trim_echo_tail(text, ngrams)
     return text.strip()

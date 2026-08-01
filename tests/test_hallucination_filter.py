@@ -1,6 +1,14 @@
-"""Anti-hallucination filter: known stock phrases and initial_prompt echoes
-must never reach delivery or the medical history file (spec:
-2026-07-31-hallucination-filter-and-start-design). Pure string tests."""
+"""Anti-hallucination filter: known stock phrases and a verbatim echo of the
+whole initial_prompt must never reach delivery or the medical history file
+(spec: 2026-07-31-hallucination-filter-and-start-design; safety rework
+2026-08-01-filter-safety-rework-HANDOFF). Pure string tests.
+
+Safety stance (medical dictation): the filter only removes text it can be sure
+is model-inserted — a stock phrase that is the WHOLE utterance or a TRAILING
+tail, or an echo of the WHOLE prompt. It never cuts mid-word, mid-sentence, or a
+partial prompt run, because the prompt lists the same anatomical terms a
+radiologist dictates. Trimming a *partial* trailing prompt echo is deferred to a
+follow-up that ships it together with a user-facing "text was trimmed" notice."""
 import os
 import sys
 
@@ -13,6 +21,8 @@ PROMPT = ('Radiografía de tórax, silueta cardiomediastínica, trama '
           'broncovascular, consolidación, derrame pleural, neumotórax, '
           'campos pulmonares, estructuras óseas, impresión diagnóstica.')
 
+
+# --- Blacklist: whole-utterance or trailing tail only, word-bounded ---
 
 def test_amara_exact_is_discarded():
     assert filter_transcription(
@@ -54,33 +64,66 @@ def test_longest_phrase_wins_no_leftover_fragment():
         'Informe listo. ¡Gracias por ver el vídeo!', PROMPT) == 'Informe listo.'
 
 
-def test_real_dictation_is_untouched():
-    text = 'Se observa consolidación basal derecha sin derrame pleural.'
-    assert filter_transcription(text, PROMPT) == text
-
-
-def test_empty_and_whitespace_input():
-    assert filter_transcription('', PROMPT) == ''
-    assert filter_transcription('   \n ', PROMPT) == ''
-    assert filter_transcription(None, PROMPT) == ''
-
-
-def test_full_echo_of_three_terms_is_discarded():
-    # Terms 1-3 of the prompt, verbatim and consecutive → echo.
+def test_blacklist_does_not_match_mid_word():
+    # Finding 1: "gracias por ver" must NOT match inside "verificar"/"verla".
     assert filter_transcription(
-        'Radiografía de tórax, silueta cardiomediastínica, '
-        'trama broncovascular.', PROMPT) == ''
+        'Gracias por verificar la imagen.', PROMPT) == \
+        'Gracias por verificar la imagen.'
+    assert filter_transcription(
+        'Le damos las gracias por verla.', PROMPT) == \
+        'Le damos las gracias por verla.'
 
+
+def test_blacklist_does_not_eat_clinical_phrase_mid_sentence():
+    # Finding 2: a legit clinical use of "gracias por ver" mid-sentence stays.
+    assert filter_transcription(
+        'Muchas gracias por ver al paciente.', PROMPT) == \
+        'Muchas gracias por ver al paciente.'
+    assert filter_transcription(
+        'Gracias por ver el estudio previo comparativo.', PROMPT) == \
+        'Gracias por ver el estudio previo comparativo.'
+
+
+# --- Prompt echo: only a verbatim echo of the WHOLE prompt is discarded ---
 
 def test_whole_prompt_echo_is_discarded():
     assert filter_transcription(PROMPT, PROMPT) == ''
 
 
-def test_one_or_two_terms_are_never_discarded():
-    # Below the MIN_ECHO_TERMS=3 threshold: legitimate short dictations.
-    assert filter_transcription('Derrame pleural.', PROMPT) == 'Derrame pleural.'
+def test_three_term_subrun_is_kept():
+    # Finding 3: the first three prompt terms are ALSO a plausible dictation,
+    # so a partial run is never discarded — only the whole prompt is.
+    text = ('Radiografía de tórax, silueta cardiomediastínica, '
+            'trama broncovascular.')
+    assert filter_transcription(text, PROMPT) == text
+
+
+def test_negative_findings_enumeration_is_kept_intact():
+    # Finding 3, the dangerous case: these ARE the prompt's consecutive terms,
+    # but as a real negative-findings dictation. Trimming would invert/erase
+    # the clinical meaning, so they must survive untouched.
     assert filter_transcription(
-        'derrame pleural, neumotórax', PROMPT) == 'derrame pleural, neumotórax'
+        'Consolidación, derrame pleural, neumotórax.', PROMPT) == \
+        'Consolidación, derrame pleural, neumotórax.'
+    assert filter_transcription(
+        'Sin consolidación, derrame pleural, neumotórax.', PROMPT) == \
+        'Sin consolidación, derrame pleural, neumotórax.'
+    assert filter_transcription(
+        'No se observa consolidación, derrame pleural, neumotórax.', PROMPT) == \
+        'No se observa consolidación, derrame pleural, neumotórax.'
+
+
+def test_trailing_partial_echo_is_kept_trim_deferred():
+    # A partial prompt echo glued to real text is NOT trimmed in this branch;
+    # that (ambiguous) trim ships in the follow-up with its user notification.
+    text = ('Estudio dentro de límites normales. Consolidación, derrame '
+            'pleural, neumotórax, campos pulmonares')
+    assert filter_transcription(text, PROMPT) == text
+
+
+def test_real_dictation_is_untouched():
+    text = 'Se observa consolidación basal derecha sin derrame pleural.'
+    assert filter_transcription(text, PROMPT) == text
 
 
 def test_dictation_with_connectors_is_not_an_echo():
@@ -90,32 +133,43 @@ def test_dictation_with_connectors_is_not_an_echo():
     assert filter_transcription(text, PROMPT) == text
 
 
-def test_trailing_echo_is_trimmed_real_text_kept():
-    # Terms 4-7 of the prompt glued to the end of a real dictation.
+def test_short_dictation_is_never_discarded():
+    assert filter_transcription('Derrame pleural.', PROMPT) == 'Derrame pleural.'
     assert filter_transcription(
-        'Estudio dentro de límites normales. Consolidación, derrame '
-        'pleural, neumotórax, campos pulmonares',
-        PROMPT) == 'Estudio dentro de límites normales.'
+        'derrame pleural, neumotórax', PROMPT) == 'derrame pleural, neumotórax'
 
+
+def test_empty_and_whitespace_input():
+    assert filter_transcription('', PROMPT) == ''
+    assert filter_transcription('   \n ', PROMPT) == ''
+    assert filter_transcription(None, PROMPT) == ''
+
+
+# --- Prompt shape / robustness ---
 
 def test_none_prompt_disables_echo_but_keeps_blacklist():
     assert filter_transcription('¡Gracias por ver el vídeo!', None) == ''
-    text = ('Radiografía de tórax, silueta cardiomediastínica, '
-            'trama broncovascular.')
-    assert filter_transcription(text, None) == text
+    assert filter_transcription(PROMPT, None) == PROMPT
 
 
-def test_short_prompt_whole_prompt_fallback():
-    """A prompt with fewer than MIN_ECHO_TERMS terms still catches echoes
-    via the whole-prompt entry in the ngram set."""
+def test_list_shaped_prompt_fails_open():
+    # A hand-edited YAML list reaches the filter as a list, not a str. The
+    # filter must fail open (no crash, echo detection simply off), never wipe
+    # every transcription. (Minor from the final review.)
+    assert filter_transcription(
+        'Radiografía de tórax normal.',
+        ['consolidación', 'derrame pleural', 'neumotórax']) == \
+        'Radiografía de tórax normal.'
+
+
+def test_short_prompt_whole_echo_is_discarded():
+    # A prompt with only two terms: a verbatim echo of the whole prompt is
+    # still discarded; a trailing partial echo is kept (trim deferred).
     short_prompt = 'silueta cardiomediastínica, trama broncovascular'
-    # Full echo of the whole (2-term) prompt is discarded...
     assert filter_transcription(
         'Silueta cardiomediastínica, trama broncovascular.', short_prompt) == ''
-    # ...and a trailing echo of it is trimmed off real text.
-    assert filter_transcription(
-        'Sin hallazgos agudos. Silueta cardiomediastínica, trama broncovascular',
-        short_prompt) == 'Sin hallazgos agudos.'
+    kept = 'Sin hallazgos agudos. Silueta cardiomediastínica, trama broncovascular'
+    assert filter_transcription(kept, short_prompt) == kept
 
 
 def test_post_process_returns_empty_for_pure_hallucination():
@@ -139,8 +193,7 @@ def test_post_process_returns_empty_for_pure_hallucination():
         # Real text still gets the normal post-processing (trailing space).
         assert transcription.post_process_transcription(
             'Sin hallazgos agudos.') == 'Sin hallazgos agudos. '
-        # Echo-dependent case: proves the configured initial_prompt reaches
-        # the filter — with a hardcoded None the echo would be delivered.
-        assert transcription.post_process_transcription(
-            'Radiografía de tórax, silueta cardiomediastínica, '
-            'trama broncovascular.') == ''
+        # Echo-dependent case: a verbatim echo of the WHOLE configured prompt
+        # is discarded — proves the configured initial_prompt reaches the
+        # filter (with a hardcoded None the echo would be delivered).
+        assert transcription.post_process_transcription(PROMPT) == ''
