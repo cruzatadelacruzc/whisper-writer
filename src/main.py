@@ -1,7 +1,7 @@
 import os
 import sys
 from audioplayer import AudioPlayer
-from PyQt5.QtCore import QObject, QProcess
+from PyQt5.QtCore import QObject, QProcess, pyqtSignal
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QAction, QMessageBox
 
@@ -17,6 +17,12 @@ from utils import ConfigManager
 
 
 class WhisperWriterApp(QObject):
+    # Input backends invoke callbacks from their own threads. Marshal those
+    # events to this QObject's thread before touching Qt objects or managing
+    # ResultThread instances.
+    activationRequested = pyqtSignal()
+    deactivationRequested = pyqtSignal()
+
     def __init__(self):
         """
         Initialize the application, opening settings window if no configuration file is found.
@@ -24,6 +30,8 @@ class WhisperWriterApp(QObject):
         super().__init__()
         self.app = QApplication(sys.argv)
         self.app.setWindowIcon(QIcon(os.path.join('assets', 'ww-logo.png')))
+        self.activationRequested.connect(self.on_activation)
+        self.deactivationRequested.connect(self.on_deactivation)
 
         ConfigManager.initialize()
 
@@ -44,8 +52,8 @@ class WhisperWriterApp(QObject):
         self.input_simulator = InputSimulator()
 
         self.key_listener = KeyListener()
-        self.key_listener.add_callback("on_activate", self.on_activation)
-        self.key_listener.add_callback("on_deactivate", self.on_deactivation)
+        self.key_listener.add_callback("on_activate", self.activationRequested.emit)
+        self.key_listener.add_callback("on_deactivate", self.deactivationRequested.emit)
 
         model_options = ConfigManager.get_config_section('model_options')
         self.use_api = bool(model_options.get('use_api'))

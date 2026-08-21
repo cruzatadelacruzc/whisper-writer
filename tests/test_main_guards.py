@@ -9,7 +9,7 @@ import os
 import sys
 import types
 import warnings
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, call
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -118,3 +118,25 @@ def test_start_result_thread_returns_early_when_model_not_loaded():
     with patch.object(main, 'ResultThread') as result_thread_cls:
         main.WhisperWriterApp.start_result_thread(self_mock)
     result_thread_cls.assert_not_called()
+
+
+def test_key_listener_callbacks_are_queued_through_qt_signals():
+    """Input callbacks must emit signals instead of calling app slots directly.
+
+    This ensures that recording state and QThread operations run in the GUI
+    thread rather than in pynput's listener thread.
+    """
+    fake_self = MagicMock()
+    fake_self.create_tray_icon = MagicMock()
+    with patch.object(main, 'InputSimulator'), \
+         patch.object(main, 'KeyListener') as key_listener_cls, \
+         patch.object(main, 'MainWindow'), \
+         patch.object(main.ConfigManager, 'get_config_section',
+                      return_value={'use_api': True}), \
+         patch.object(main.ConfigManager, 'get_config_value', return_value=True):
+        main.WhisperWriterApp.initialize_components(fake_self)
+
+    assert key_listener_cls.return_value.add_callback.mock_calls == [
+        call('on_activate', fake_self.activationRequested.emit),
+        call('on_deactivate', fake_self.deactivationRequested.emit),
+    ]
