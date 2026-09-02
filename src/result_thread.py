@@ -25,10 +25,14 @@ class ResultThread(QThread):
     Signals:
         statusSignal: Emits the current status of the thread (e.g., 'recording', 'transcribing', 'idle')
         resultSignal: Emits the transcription result
+        echoTrimSignal: Emits the fragment cut by a partial prompt-echo trim,
+            only when one actually happened (never on error, never on a
+            full discard)
     """
 
     statusSignal = pyqtSignal(str)
     resultSignal = pyqtSignal(str)
+    echoTrimSignal = pyqtSignal(str)
 
     def __init__(self, local_model=None):
         """
@@ -83,7 +87,7 @@ class ResultThread(QThread):
 
             # Time the transcription process
             start_time = time.time()
-            result = transcribe(audio_data, self.local_model)
+            result, trimmed_tail = transcribe(audio_data, self.local_model)
             end_time = time.time()
 
             transcription_time = end_time - start_time
@@ -94,6 +98,8 @@ class ResultThread(QThread):
 
             self.statusSignal.emit('idle')
             self.resultSignal.emit(result)
+            if trimmed_tail:
+                self.echoTrimSignal.emit(trimmed_tail)
 
         except Exception:
             traceback.print_exc()

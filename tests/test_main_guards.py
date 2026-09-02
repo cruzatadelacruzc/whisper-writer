@@ -38,12 +38,45 @@ with warnings.catch_warnings():
     warnings.simplefilter('ignore')
     import main  # noqa: E402
 
+import result_thread  # noqa: E402
+
 
 def _config(noise=False, recording_mode='press_to_toggle'):
     return lambda section, key: {
         'noise_on_completion': noise,
         'recording_mode': recording_mode,
     }[key]
+
+
+def test_run_emits_echo_trim_signal_when_transcription_is_trimmed():
+    fake_self = MagicMock()
+    fake_self.is_running = True
+    fake_self._record_audio.return_value = 'AUDIO'
+    with patch.object(result_thread, 'transcribe',
+                       return_value=('hola', 'Consolidación, derrame pleural')):
+        result_thread.ResultThread.run(fake_self)
+    fake_self.resultSignal.emit.assert_called_once_with('hola')
+    fake_self.echoTrimSignal.emit.assert_called_once_with(
+        'Consolidación, derrame pleural')
+
+
+def test_run_does_not_emit_echo_trim_signal_without_a_trim():
+    fake_self = MagicMock()
+    fake_self.is_running = True
+    fake_self._record_audio.return_value = 'AUDIO'
+    with patch.object(result_thread, 'transcribe', return_value=('hola', None)):
+        result_thread.ResultThread.run(fake_self)
+    fake_self.resultSignal.emit.assert_called_once_with('hola')
+    fake_self.echoTrimSignal.emit.assert_not_called()
+
+
+def test_run_exception_path_never_emits_echo_trim_signal():
+    fake_self = MagicMock()
+    fake_self.is_running = True
+    fake_self._record_audio.side_effect = RuntimeError('boom')
+    result_thread.ResultThread.run(fake_self)
+    fake_self.resultSignal.emit.assert_called_once_with('')
+    fake_self.echoTrimSignal.emit.assert_not_called()
 
 
 def test_copy_last_transcription_empty_does_not_touch_clipboard():
@@ -176,3 +209,32 @@ def test_on_settings_closed_initializes_on_first_run():
          patch.object(main.QMessageBox, 'information'):
         main.WhisperWriterApp.on_settings_closed(fake_self)
     fake_self.initialize_components.assert_called_once_with()
+
+
+def test_start_result_thread_connects_echo_trim_signal():
+    """The new echoTrimSignal must be wired up the same way resultSignal is,
+    so a partial trim reaches the tray-toast slot."""
+    self_mock = MagicMock()
+    self_mock.result_thread = None
+    self_mock.local_model = object()
+    self_mock.use_api = False
+    with patch.object(main, 'ResultThread') as result_thread_cls, \
+         patch.object(main.ConfigManager, 'get_config_value', return_value=True):
+        instance = result_thread_cls.return_value
+        main.WhisperWriterApp.start_result_thread(self_mock)
+    instance.echoTrimSignal.connect.assert_called_once_with(
+        self_mock.on_echo_trimmed)
+    instance.resultSignal.connect.assert_called_once_with(
+        self_mock.on_transcription_complete)
+
+
+def test_on_echo_trimmed_shows_tray_toast_with_fragment():
+    fake_self = MagicMock()
+    main.WhisperWriterApp.on_echo_trimmed(
+        fake_self, 'Consolidación, derrame pleural')
+    fake_self.tray_icon.showMessage.assert_called_once()
+    args = fake_self.tray_icon.showMessage.call_args[0]
+    assert args[0] == 'WhisperWriter'
+    assert 'Consolidación, derrame pleural' in args[1]
+    assert args[2] == main.QSystemTrayIcon.Information
+    assert args[3] == 10000
