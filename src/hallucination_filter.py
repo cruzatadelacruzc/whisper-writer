@@ -167,7 +167,11 @@ def _trim_echo_tail(text, ngrams):
     if len(head_words) <= 2 or head_words[-1] in NEGATION_STUBS:
         return text, None
 
-    return head, text[start:].strip()
+    tail = text[start:].strip()
+    if any(ch in '.;' for ch in tail[:-1]):
+        return text, None
+
+    return head, tail
 
 
 def filter_transcription(text, initial_prompt):

@@ -150,6 +150,17 @@ def test_trim_rejected_when_match_is_whole_text():
     assert filter_transcription(text, PROMPT) == (text, None)
 
 
+def test_trim_rejected_when_tail_contains_internal_sentence_boundary():
+    # Real positive findings dictated as separate short sentences must
+    # never be silently cut just because they line up with consecutive
+    # prompt terms. A trailing '.' alone is fine (that's the shipped
+    # comma-enumerated case); a '.'/';' INSIDE the tail means these are
+    # separate sentences, not one enumeration, and must survive intact.
+    text = ('Hay hallazgos relevantes. Consolidación. Derrame pleural. '
+            'Neumotórax.')
+    assert filter_transcription(text, PROMPT) == (text, None)
+
+
 def test_real_dictation_is_untouched():
     text = 'Se observa consolidación basal derecha sin derrame pleural.'
     assert filter_transcription(text, PROMPT) == (text, None)
