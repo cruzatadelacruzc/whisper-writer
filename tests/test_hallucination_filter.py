@@ -7,12 +7,13 @@ Safety stance (medical dictation): the filter only removes text it can be sure
 is model-inserted — a stock phrase that is the WHOLE utterance or a TRAILING
 tail, or an echo of the WHOLE prompt. It never cuts mid-word, mid-sentence, or a
 partial prompt run, because the prompt lists the same anatomical terms a
-radiologist dictates. Trimming a *partial* trailing prompt echo is deferred to a
-follow-up that ships it together with a user-facing "text was trimmed" notice.
+radiologist dictates. A partial trailing prompt echo IS trimmed, but only
+when a sentence boundary precedes it in the original text (see the
+sentence-boundary-guarded cases below).
 
 filter_transcription returns (cleaned_text, trimmed_tail): trimmed_tail is
-always None in this file today (the trim itself lands in a later commit); it
-exists now so callers can be updated once, ahead of the trim landing."""
+the exact fragment cut by a partial trim, or None when nothing was
+trimmed."""
 import os
 import sys
 
@@ -117,11 +118,35 @@ def test_negative_findings_enumeration_is_kept_intact():
         ('No se observa consolidación, derrame pleural, neumotórax.', None)
 
 
-def test_trailing_partial_echo_is_kept_trim_deferred():
-    # A partial prompt echo glued to real text is NOT trimmed in this branch;
-    # that (ambiguous) trim ships in the follow-up with its user notification.
+def test_trailing_echo_after_period_is_trimmed_with_notice():
+    # The trim deferred in PR #9 now ships: a real sentence ending in '.'
+    # followed by a verbatim run of >=3 consecutive prompt terms is cut,
+    # and the cut fragment is reported so the caller can notify the user.
     text = ('Estudio dentro de límites normales. Consolidación, derrame '
             'pleural, neumotórax, campos pulmonares')
+    assert filter_transcription(text, PROMPT) == (
+        'Estudio dentro de límites normales.',
+        'Consolidación, derrame pleural, neumotórax, campos pulmonares')
+
+
+def test_trim_rejected_when_head_too_short():
+    # A period precedes the echoed run, but the head would be too short
+    # (<=2 words) to safely deliver alone, so the trim is rejected.
+    text = 'Bien. Consolidación, derrame pleural, neumotórax.'
+    assert filter_transcription(text, PROMPT) == (text, None)
+
+
+def test_trim_rejected_when_head_ends_in_dangling_negation():
+    # Even with a sentence boundary before the echo, a head ending in a
+    # dangling negation/preposition is not a safe sentence on its own.
+    text = 'Hallazgo relevante sin. Consolidación, derrame pleural, neumotórax.'
+    assert filter_transcription(text, PROMPT) == (text, None)
+
+
+def test_trim_rejected_when_match_is_whole_text():
+    # No character precedes the echoed run at all (it IS the whole text),
+    # so there is no sentence boundary to satisfy — never trimmed.
+    text = 'Consolidación, derrame pleural, neumotórax, campos pulmonares'
     assert filter_transcription(text, PROMPT) == (text, None)
 
 
