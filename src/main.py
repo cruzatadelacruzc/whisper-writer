@@ -203,6 +203,7 @@ class WhisperWriterApp(QObject):
             self.result_thread.statusSignal.connect(self.status_window.updateStatus)
             self.status_window.closeSignal.connect(self.stop_result_thread)
         self.result_thread.resultSignal.connect(self.on_transcription_complete)
+        self.result_thread.echoTrimSignal.connect(self.on_echo_trimmed)
         self.result_thread.start()
 
     def stop_result_thread(self):
@@ -243,6 +244,19 @@ class WhisperWriterApp(QObject):
             self.start_result_thread()
         else:
             self.key_listener.start()
+
+    def on_echo_trimmed(self, trimmed_tail):
+        """Non-blocking notice: a possibly-real tail was cut from the end of
+        the dictation because it verbatim-echoed the configured prompt right
+        after a sentence boundary. Only ResultThread's success path with an
+        actual partial trim reaches this — never a full discard or error."""
+        self.tray_icon.showMessage(
+            'WhisperWriter',
+            f'Se recortó posible texto real al final del dictado: '
+            f'"{trimmed_tail}". Vuelve a dictarlo si hacía falta.',
+            QSystemTrayIcon.Information,
+            10000,
+        )
 
     def copy_last_transcription(self):
         """

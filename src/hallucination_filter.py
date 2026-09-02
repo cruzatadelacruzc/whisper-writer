@@ -14,9 +14,12 @@ never matched mid-word or mid-sentence. A prompt echo is discarded only when
 the whole prompt is reproduced verbatim — never a partial run, because the
 prompt lists the same anatomical terms a radiologist actually dictates (so
 "Sin consolidación, derrame pleural, neumotórax" is real speech, not an echo).
-Trimming a *partial* trailing prompt echo is intentionally deferred to a
-follow-up that ships it together with a user-facing "text was trimmed" notice
-(see docs/superpowers/specs/2026-08-01-filter-safety-rework-HANDOFF.md).
+A partial trailing prompt echo IS trimmed, but only when a sentence boundary
+(.;/newline) sits right before it in the original text — that is what spares
+in-sentence negatives like the example above, since nothing ever precedes
+those terms but the word "Sin". The trimmed fragment is reported back to the
+caller (never silently dropped) so it can raise a user-facing notice; see
+docs/superpowers/specs/2026-09-02-echo-trim-tray-notification-design.md.
 
 Pure string processing — no Qt, no I/O, no config access: the caller passes
 the initial_prompt in (spec: 2026-07-31-hallucination-filter-and-start).
@@ -32,6 +35,14 @@ KNOWN_HALLUCINATIONS = [
     '¡Gracias por ver el vídeo!',
     'Gracias por ver',
 ]
+
+# An echo must span at least this many consecutive prompt terms to be a
+# trim candidate: dictations of one or two real terms must survive.
+MIN_ECHO_TERMS = 3
+
+# A trimmed head must not end on a dangling negation/preposition — cutting
+# right after one of these would invert or erase the doctor's own sentence.
+NEGATION_STUBS = {'sin', 'no', 'ni', 'de', 'con', 'y', 'o', 'e', 'u'}
 
 
 def _normalize_with_map(text):
@@ -100,22 +111,88 @@ def _strip_blacklist(text):
     return text
 
 
-def filter_transcription(text, initial_prompt):
-    """Return `text` cleaned of known hallucinations, or '' to discard it.
+def _prompt_ngrams(initial_prompt):
+    """Normalized consecutive runs of >= MIN_ECHO_TERMS prompt terms.
 
-    An empty return value flows through the existing empty-result path in
-    main.py: nothing is saved to history, delivered, or pasted.
+    A non-string prompt (a hand-edited YAML list) disables echo-tail
+    detection rather than crashing.
+    """
+    if not isinstance(initial_prompt, str) or not initial_prompt:
+        return set()
+    terms = [_normalize(t) for t in initial_prompt.split(',')]
+    terms = [t for t in terms if t]
+    ngrams = set()
+    for n in range(MIN_ECHO_TERMS, len(terms) + 1):
+        for i in range(len(terms) - n + 1):
+            ngrams.add(' '.join(terms[i:i + n]))
+    return ngrams
+
+
+def _trim_echo_tail(text, ngrams):
+    """Cut a trailing run of >= MIN_ECHO_TERMS consecutive prompt terms.
+
+    Only accepted when: (1) a sentence boundary ('.', ';', or a newline)
+    sits immediately before the echoed run in the ORIGINAL text — this is
+    what spares in-sentence negatives like "Sin consolidación, derrame
+    pleural, neumotórax" from being mangled, since nothing but the word
+    "Sin" ever precedes those terms there; (2) the remaining head has more
+    than 2 words and does not end in a dangling negation/preposition.
+    Returns (text, tail): tail is None when nothing was cut.
+    """
+    if not ngrams:
+        return text, None
+    norm, idx_map = _normalize_with_map(text)
+    best = None
+    for g in ngrams:
+        if (norm == g or norm.endswith(' ' + g)) and \
+                (best is None or len(g) > len(best)):
+            best = g
+    if best is None:
+        return text, None
+
+    start = idx_map[len(norm) - len(best)]
+    # Absorb any opening punctuation glued before the tail, same as the
+    # blacklist does ("... ¡Radiografía de tórax...").
+    while start > 0 and text[start - 1] in '¡¿"\'(':
+        start -= 1
+
+    boundary = start - 1
+    while boundary >= 0 and text[boundary] in ' \t\n':
+        boundary -= 1
+    if boundary < 0 or text[boundary] not in '.;\n':
+        return text, None
+
+    head = text[:start].rstrip()
+    head_words = [w for w in _normalize(head).split(' ') if w]
+    if len(head_words) <= 2 or head_words[-1] in NEGATION_STUBS:
+        return text, None
+
+    tail = text[start:].strip()
+    if any(ch in '.;' for ch in tail[:-1]):
+        return text, None
+
+    return head, tail
+
+
+def filter_transcription(text, initial_prompt):
+    """Return (cleaned_text, trimmed_tail).
+
+    cleaned_text is '' to signal the caller should discard the result
+    entirely (flows through the existing empty-result path in main.py).
+    trimmed_tail is the fragment removed by a partial echo-tail trim, or
+    None when nothing was trimmed.
     """
     if not text or not text.strip():
-        return ''
+        return '', None
     text = _strip_blacklist(text)
     norm = _normalize(text)
     if not norm:
-        return ''
+        return '', None
     # Discard only a verbatim echo of the WHOLE prompt. A non-string prompt
     # (a hand-edited YAML list) disables echo detection rather than crashing.
     if isinstance(initial_prompt, str):
         prompt_norm = _normalize(initial_prompt)
         if prompt_norm and norm == prompt_norm:
-            return ''
-    return text.strip()
+            return '', None
+    text, trimmed_tail = _trim_echo_tail(text, _prompt_ngrams(initial_prompt))
+    return text.strip(), trimmed_tail
