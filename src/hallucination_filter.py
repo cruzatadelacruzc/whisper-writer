@@ -101,21 +101,23 @@ def _strip_blacklist(text):
 
 
 def filter_transcription(text, initial_prompt):
-    """Return `text` cleaned of known hallucinations, or '' to discard it.
+    """Return (cleaned_text, trimmed_tail).
 
-    An empty return value flows through the existing empty-result path in
-    main.py: nothing is saved to history, delivered, or pasted.
+    cleaned_text is '' to signal the caller should discard the result
+    entirely (flows through the existing empty-result path in main.py).
+    trimmed_tail is the fragment removed by a partial echo-tail trim, or
+    None when nothing was trimmed.
     """
     if not text or not text.strip():
-        return ''
+        return '', None
     text = _strip_blacklist(text)
     norm = _normalize(text)
     if not norm:
-        return ''
+        return '', None
     # Discard only a verbatim echo of the WHOLE prompt. A non-string prompt
     # (a hand-edited YAML list) disables echo detection rather than crashing.
     if isinstance(initial_prompt, str):
         prompt_norm = _normalize(initial_prompt)
         if prompt_norm and norm == prompt_norm:
-            return ''
-    return text.strip()
+            return '', None
+    return text.strip(), None

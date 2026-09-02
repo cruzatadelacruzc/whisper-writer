@@ -92,12 +92,16 @@ def transcribe_api(audio_data):
 def post_process_transcription(transcription):
     """
     Apply post-processing to the transcription.
+
+    Returns (text, trimmed_tail): trimmed_tail is the fragment cut by a
+    partial echo-tail trim (see hallucination_filter.filter_transcription),
+    or None when nothing was trimmed.
     """
     model_options = ConfigManager.get_config_section('model_options')
-    transcription = filter_transcription(
+    transcription, trimmed_tail = filter_transcription(
         transcription, model_options['common']['initial_prompt'])
     if not transcription:
-        return ''
+        return '', trimmed_tail
     post_processing = ConfigManager.get_config_section('post_processing')
     if post_processing['remove_trailing_period'] and transcription.endswith('.'):
         transcription = transcription[:-1]
@@ -106,14 +110,15 @@ def post_process_transcription(transcription):
     if post_processing['remove_capitalization']:
         transcription = transcription.lower()
 
-    return transcription
+    return transcription, trimmed_tail
 
 def transcribe(audio_data, local_model=None):
     """
-    Transcribe audio date using the OpenAI API or a local model, depending on config.
+    Transcribe audio data using the OpenAI API or a local model, depending
+    on config. Returns (text, trimmed_tail) — see post_process_transcription.
     """
     if audio_data is None:
-        return ''
+        return '', None
 
     if ConfigManager.get_config_value('model_options', 'use_api'):
         transcription = transcribe_api(audio_data)
