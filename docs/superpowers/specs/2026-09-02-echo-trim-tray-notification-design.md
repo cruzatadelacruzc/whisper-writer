@@ -56,6 +56,20 @@ condition that trimming ships together with a user-facing notice.
      trimmed). Reject the trim (return the text unchanged, `trimmed_tail =
      None`) if the head's word count is ≤2, or if its last word (normalized)
      is in `{sin, no, ni, de, con, y, o, e, u}`.
+  3b. **(Added 2026-09-02, post-review of Task 2)** Reject the trim if the
+     matched tail *itself* contains a sentence boundary (`.` or `;`)
+     anywhere except possibly as its very last character. Rule 2 only
+     checks the character immediately *before* the match, so real positive
+     findings dictated as separate short sentences that happen to line up
+     with consecutive prompt terms — e.g. `"Hay hallazgos relevantes.
+     Consolidación. Derrame pleural. Neumotórax."` — were being cut
+     entirely (verified against the shipped Task 2 code before this
+     addendum). The toast still shows what would have been cut, but a
+     silent-in-the-record trim of a real finding is not an acceptable
+     residual risk for this app; this closes it in code instead of relying
+     on the doctor reading the toast. Confirmed this does not affect any
+     already-shipped test case (the shipped positive-trim example is
+     comma-separated, no internal `.`/`;`).
   4. On acceptance, return `(head, original_tail_substring)` — the tail is
      taken from the *original* text (not the normalized form) so the toast
      shows real casing/accents/punctuation.
