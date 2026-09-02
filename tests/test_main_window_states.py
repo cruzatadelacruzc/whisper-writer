@@ -43,3 +43,9 @@ def test_set_model_error_disables_start(window):
     window.setModelError()
     assert window.model_status_label.text() == 'Model load failed — check Settings'
     assert window.start_btn.isEnabled() is False
+
+
+def test_start_button_disabled_at_construction(window):
+    """No race window between show() and setModelLoading(): the button is
+    born disabled and only the state methods enable it."""
+    assert window.start_btn.isEnabled() is False

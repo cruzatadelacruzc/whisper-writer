@@ -139,15 +139,15 @@ It must be run **from the project root** on both systems.
 
 - The main window appears within a few seconds showing **“Loading model…”** with the Start button disabled; when the label changes to **“Model ready”**, Start is enabled and you can begin dictating. If loading fails, the label shows *“Model load failed — check Settings”* — fix the model configuration in Settings (saving restarts the application, which retries the load).
 - The application sits as a system tray icon.
-- Dictation hotkey: **`ctrl+shift+space`** (configurable). **Start does not record by itself — it arms the hotkey**; recording begins when you press the hotkey (that is when the status overlay appears).
+- Dictation hotkey: **`ctrl+shift+space`** (configurable). **Clicking Start behaves exactly like pressing the hotkey**: it arms the hotkey and starts recording immediately (the status overlay appears and the window hides). Later recordings are started and stopped with the hotkey.
 - The `pkg_resources is deprecated` warning at startup is harmless: ignore it.
-- The main window (tray icon → WhisperWriter Main Menu) has three buttons: **Start** (arm the dictation hotkey), **Settings** (open the Settings window), and **Copy Last** (re-copy the most recent transcription to the clipboard, in case the original paste was missed or overwritten), plus the model status label described above.
+- The main window (tray icon → WhisperWriter Main Menu) has three buttons: **Start** (arm the hotkey and start recording — a click behaves like a hotkey press), **Settings** (open the Settings window), and **Copy Last** (re-copy the most recent transcription to the clipboard, in case the original paste was missed or overwritten), plus the model status label described above.
 
 ## The dictation flow, step by step
 
-1. Wait for **Model ready**, press **Start** (the window hides; the hotkey is now armed).
-2. Place the cursor in the target document and press **`ctrl+shift+space`** — the status overlay shows *recording*.
-3. Speak one phrase. Recording stops on its own after ~0.9 s of silence (`recording_options.silence_duration`), the overlay shows *transcribing*, and the text is pasted into the active window.
+1. Wait for **Model ready**, press **Start** — recording begins immediately and the window hides. Focus the target document while you speak: the text lands in the **active** window when transcription finishes.
+2. Speak one phrase. How recording stops depends on `recording_options.recording_mode` (table below): with the recommended `press_to_toggle` you press the hotkey when the phrase is done; the VAD-based modes (`continuous`, `voice_activity_detection`) stop on their own after ~0.9 s of silence (`recording_options.silence_duration`).
+3. The overlay shows *transcribing* and the text is pasted into the active window. For the next phrase press **`ctrl+shift+space`** — the hotkey stays armed.
 4. What happens next depends on `recording_options.recording_mode`:
 
 | `recording_mode` | After each phrase | Best for |
